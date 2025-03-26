@@ -49,9 +49,9 @@ RcGroups 'jihlein' - IMU implementation overhaul + SBUS implementation
 //========================================================================================================================//
 
 //Uncomment only one receiver type
-#define USE_PWM_RX
+//#define USE_PWM_RX
 //#define USE_PPM_RX
-//#define USE_SBUS_RX
+#define USE_SBUS_RX
 
 //Uncomment only one IMU
 #define USE_MPU6050_I2C //default
@@ -164,6 +164,7 @@ unsigned long channel_3_fs = 1500; //elev
 unsigned long channel_4_fs = 1500; //rudd
 unsigned long channel_5_fs = 2000; //gear, greater than 1500 = throttle cut
 unsigned long channel_6_fs = 2000; //aux1
+unsigned long channel_7_fs = 1500; //aux2
 
 //Filter parameters - Defaults tuned for 2kHz loop rate; Do not touch unless you know what you are doing:
 float B_madgwick = 0.04;  //Madgwick filter parameter
@@ -262,7 +263,7 @@ unsigned long blink_counter, blink_delay;
 bool blinkAlternate;
 
 //Radio comm:
-unsigned long channel_1_pwm, channel_2_pwm, channel_3_pwm, channel_4_pwm, channel_5_pwm, channel_6_pwm;
+unsigned long channel_1_pwm, channel_2_pwm, channel_3_pwm, channel_4_pwm, channel_5_pwm, channel_6_pwm, channel_7_pwm;
 unsigned long channel_1_pwm_prev, channel_2_pwm_prev, channel_3_pwm_prev, channel_4_pwm_prev;
 
 #if defined USE_SBUS_RX
@@ -346,6 +347,7 @@ void setup() {
   channel_4_pwm = channel_4_fs;
   channel_5_pwm = channel_5_fs;
   channel_6_pwm = channel_6_fs;
+  channel_7_pwm = channel_7_fs;
 
   //Initialize IMU communication
   IMUinit();
@@ -414,7 +416,7 @@ void loop() {
   //printRollPitchYaw();  //prints roll, pitch, and yaw angles in degrees from Madgwick filter (expected: degrees, 0 when level)
   //printPIDoutput();     //prints computed stabilized PID variables from controller and desired setpoint (expected: ~ -1 to 1)
   //printMotorCommands(); //prints the values being written to the motors (expected: 120 to 250)
-  printServoCommands(); //prints the values being written to the servos (expected: 0 to 180)
+  //printServoCommands(); //prints the values being written to the servos (expected: 0 to 180)
   //printLoopRate();      //prints the time between loops in microseconds (expected: microseconds between loop iterations)
 
   //Get vehicle state
@@ -1060,9 +1062,10 @@ void controlMixer() {
   //F-35 Mixing
 
   //Servo trims - tune accordingly
-  float tilt_servo_trim = 0.47; //adjust to center tilt servo
+  float nose_wheel_trim = .1;
+  float tilt_servo_trim = 0.5; //adjust to center tilt servo
   
-  float left_elevon_trim = 0.63; //adjust in 0.1 incriments to bring left elevon level
+  float left_elevon_trim = 0.5; //adjust in 0.1 incriments to bring left elevon level
   float right_elevon_trim = 0.5; //adjust in 0.1 incriments to bring right elevon level
   
   float left_ail_trim_hover = .94; //adjust in 0.1 incriments to bring left aileron to ~70 degrees down when in hover mode
@@ -1071,8 +1074,8 @@ void controlMixer() {
   float left_ail_trim_trans = 0.7; //adjust in 0.1 incriments to bring left aileron to ~30 degrees down when in transition mode
   float right_ail_trim_trans = 0.3; //adjust in 0.1 incriments to bring right aileron to ~30 degrees down when in transition mode
   
-  float left_ail_trim_ff = 0.25; //adjust in 0.1 incriments to bring left aileron to level when in forward flight mode
-  float right_ail_trim_ff = 0.7; //adjust in 0.1 incriments to bring right aileron to level when in forward flight mode
+  float left_ail_trim_ff = 0.4; //adjust in 0.1 incriments to bring left aileron to level when in forward flight mode
+  float right_ail_trim_ff = 0.6; //adjust in 0.1 incriments to bring right aileron to level when in forward flight mode
 
   float elevon_gain = 0.5; //adjust to increase/decrease throw of elevon servos in forward flight
   float aileron_gain = 0.7; //adjust to increase/decrease throw of aileron servos in forward flight
@@ -1196,7 +1199,11 @@ void controlMixer() {
   m4_command_scaled = 0;
   m5_command_scaled = 0;
   m6_command_scaled = 0;
-  s6_command_scaled = 0;
+
+  s6_command_scaled = .5 + nose_wheel_trim;
+  if (channel_7_pwm > 1500) {
+    s6_command_scaled = 1 - (.5 + yaw_passthru) + nose_wheel_trim;
+  }
   s7_command_scaled = 0;
 
   //Done with control mixing!
@@ -1267,12 +1274,13 @@ void getCommands() {
       //sBus scaling below is for Taranis-Plus and X4R-SB
       float scale = 0.615;  
       float bias  = 895.0; 
-      channel_1_pwm = sbusChannels[0] * scale + bias;
-      channel_2_pwm = sbusChannels[1] * scale + bias;
-      channel_3_pwm = sbusChannels[2] * scale + bias;
+      channel_1_pwm = sbusChannels[2] * scale + bias;
+      channel_2_pwm = sbusChannels[0] * scale + bias;
+      channel_3_pwm = sbusChannels[1] * scale + bias;
       channel_4_pwm = sbusChannels[3] * scale + bias;
       channel_5_pwm = sbusChannels[4] * scale + bias;
       channel_6_pwm = sbusChannels[5] * scale + bias; 
+      channel_7_pwm = sbusChannels[6] * scale + bias; 
     }
   #endif
   
